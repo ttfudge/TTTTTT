@@ -736,6 +736,9 @@
 
     <button type="submit" class="btn-primary">Submit</button>
   </form>
+
+  <!-- STATUS MESSAGE (added) -->
+  <p id="form-status" role="status" aria-live="polite" style="margin-top:1rem;font-weight:700;text-align:center;"></p>
 </section>
 
 <footer class="container-shadow" aria-label="Site footer">
@@ -797,6 +800,73 @@
     { threshold: 0.15 }
   );
   sections.forEach(section => observer.observe(section));
+
+  /* ---------------- Form submission -> Google Sheets ----------------
+     - Prevents page reload
+     - Sends JSON to your Apps Script URL
+     - Displays success or error message in #form-status
+  ------------------------------------------------------------------*/
+  (function() {
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwu6KaavDbtPVQXsSo_5BTI2Q7QbehVTcw4M7PKbOnn4AgP9T3r_OJNZZ2Wktuo1vKl/exec';
+    const form = document.getElementById('appointment-form');
+    const statusEl = document.getElementById('form-status');
+    const submitBtn = form.querySelector('button[type="submit"]');
+
+    function showStatus(success, text) {
+      statusEl.style.color = success ? 'green' : 'red';
+      statusEl.textContent = text;
+    }
+
+    form.addEventListener('submit', async function(e) {
+      e.preventDefault();
+
+      // basic client-side required check
+      const required = ['name','email','phone','service'];
+      for (const name of required) {
+        const el = form.querySelector(`[name="${name}"]`);
+        if (!el || !el.value.trim()) {
+          showStatus(false, 'Please fill in all required fields.');
+          el && el.focus();
+          return;
+        }
+      }
+
+      // disable to prevent double submits
+      submitBtn.disabled = true;
+      showStatus(true, 'Sending...');
+
+      const payload = {
+        name: form.name.value.trim(),
+        email: form.email.value.trim(),
+        phone: form.phone.value.trim(),
+        service: form.service.value,
+        message: form.message.value.trim()
+      };
+
+      try {
+        const resp = await fetch(SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (resp.ok) {
+          // Apps Script may or may not return a JSON body; treat 200 as success
+          showStatus(true, '✅ Thank you! Your appointment request has been submitted.');
+          form.reset();
+        } else {
+          // non-200 response
+          throw new Error('Network response was not OK (' + resp.status + ')');
+        }
+      } catch (err) {
+        console.error('Form submit error:', err);
+        // Most likely cause if this happens in browser: Apps Script permissions / CORS
+        showStatus(false, '❌ Submission failed. Check Apps Script permissions (set "Who has access" to "Anyone, even anonymous") or see console for details.');
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+  })();
 </script>
 </body>
 </html>
